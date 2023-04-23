@@ -1,18 +1,33 @@
 package main
 
 import (
+	"fmt"
 	"github.com/go-mysql-org/go-mysql/server"
 	"github.com/pkg/errors"
 	"log"
 	"net"
-	"os"
 )
 
 func main() {
-	args := os.Args[1:]
-	l, err := net.Listen("tcp", args[0])
+	config, err := NewConfigFromTOML("config.toml")
 	if err != nil {
-		log.Println(errors.Wrapf(err, "error establishing connection to %s", args[0]))
+		log.Println(errors.Wrap(err, "error unmarshalling config.toml"))
+		return
+	}
+
+	log.Printf("read config: %+v", config)
+
+	credProvider := server.NewInMemoryProvider()
+	for _, v := range config.Credentials {
+		credProvider.AddUser(v.User, v.Password)
+	}
+
+	port := config.Connection.Port
+	port = fmt.Sprintf(":%s", port)
+
+	l, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Println(errors.Wrapf(err, "error establishing connection to %s", port))
 		return
 	}
 	defer l.Close()
@@ -23,13 +38,22 @@ func main() {
 			log.Println(errors.Wrapf(err, "error accepting new connections"))
 			continue
 		}
-		go handleConnection(c)
+		go handleConnection(c, credProvider)
 	}
 }
 
-func handleConnection(c net.Conn) {
-	_, err := server.NewConn(c, "root", "", server.EmptyHandler{})
+func handleConnection(c net.Conn, credProvider *server.InMemoryProvider) {
+	defaultServer := server.NewDefaultServer()
+	conn, err := server.NewCustomizedConn(c, defaultServer, credProvider, server.EmptyHandler{})
 	if err != nil {
 		log.Println(errors.Wrap(err, "error creating connection handler"))
+		return
+	}
+
+	for {
+		if err := conn.HandleCommand(); err != nil {
+			log.Println(errors.WithStack(err))
+			return
+		}
 	}
 }

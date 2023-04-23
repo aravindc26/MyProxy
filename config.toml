@@ -1,0 +1,12 @@
+[connection]
+port = "4306"
+
+[database]
+root_user = "root"
+root_password = "12345"
+host = "localhost"
+port = "3306"
+
+[[credentials]]
+user = "aravind"
+password = "123"
