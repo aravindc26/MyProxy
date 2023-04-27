@@ -1,4 +1,5 @@
 [connection]
+host = "localhost"
 port = "4306"
 
 [database]

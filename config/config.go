@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"github.com/pelletier/go-toml"
@@ -20,6 +20,7 @@ type Config struct {
 
 type Connection struct {
 	Port string `toml:"port"`
+	Host string `toml:"host"`
 }
 
 type Credentials struct {
