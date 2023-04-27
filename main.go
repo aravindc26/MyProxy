@@ -2,11 +2,14 @@ package main
 
 import (
 	"MyProxy/config"
+	"crypto/tls"
 	"fmt"
-	"github.com/go-mysql-org/go-mysql/server"
-	"github.com/pkg/errors"
 	"log"
 	"net"
+
+	"github.com/aravindc26/go-mysql/mysql"
+	"github.com/aravindc26/go-mysql/server"
+	"github.com/pkg/errors"
 )
 
 func main() {
@@ -34,19 +37,20 @@ func main() {
 	}
 	defer l.Close()
 
+	mysql8server := getMySql8Server()
+
 	for {
 		c, err := l.Accept()
 		if err != nil {
 			log.Println(errors.Wrapf(err, "error accepting new connections"))
 			continue
 		}
-		go handleConnection(c, credProvider)
+		go handleConnection(c, credProvider, mysql8server)
 	}
 }
 
-func handleConnection(c net.Conn, credProvider *server.InMemoryProvider) {
-	defaultServer := server.NewDefaultServer()
-	conn, err := server.NewCustomizedConn(c, defaultServer, credProvider, server.EmptyHandler{})
+func handleConnection(c net.Conn, credProvider *server.InMemoryProvider, mysql8server *server.Server) {
+	conn, err := server.NewCustomizedConn(c, mysql8server, credProvider, server.EmptyHandler{})
 	if err != nil {
 		log.Println(errors.Wrap(err, "error creating connection handler"))
 		return
@@ -58,4 +62,13 @@ func handleConnection(c net.Conn, credProvider *server.InMemoryProvider) {
 			return
 		}
 	}
+}
+
+func getMySql8Server() *server.Server {
+	caPem, caKey := server.GenerateCA()
+	certPem, keyPem := server.GenerateAndSignRSACerts(caPem, caKey)
+	tlsConf := server.NewServerTLSConfig(caPem, certPem, keyPem, tls.VerifyClientCertIfGiven)
+
+	mysql8server := server.NewServer("8.0.0", mysql.DEFAULT_COLLATION_ID, mysql.AUTH_NATIVE_PASSWORD, server.GetPublicKeyFromCert(certPem), tlsConf)
+	return mysql8server
 }
