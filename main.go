@@ -2,11 +2,14 @@ package main
 
 import (
 	"MyProxy/config"
+	"MyProxy/handler"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
 
+	"github.com/aravindc26/go-mysql/client"
 	"github.com/aravindc26/go-mysql/mysql"
 	"github.com/aravindc26/go-mysql/server"
 	"github.com/pkg/errors"
@@ -39,18 +42,33 @@ func main() {
 
 	mysql8server := getMySql8Server()
 
+	connPool := client.NewPool(log.Printf, 100, 400, 5, "127.0.0.1:3306", "root", "S3cret", "v")
+
+	conn, err := connPool.GetConn(context.Background())
+	if err != nil {
+		log.Printf("error fetching connection %v", err)
+	}
+	defer conn.Close()
+
+	err = conn.Ping()
+	if err != nil {
+		log.Fatal("ping err", err)
+	}
+
+	mysqlHandler := handler.NewProxyHandler(connPool)
+
 	for {
 		c, err := l.Accept()
 		if err != nil {
 			log.Println(errors.Wrapf(err, "error accepting new connections"))
 			continue
 		}
-		go handleConnection(c, credProvider, mysql8server)
+		go handleConnection(c, credProvider, mysql8server, mysqlHandler)
 	}
 }
 
-func handleConnection(c net.Conn, credProvider *server.InMemoryProvider, mysql8server *server.Server) {
-	conn, err := server.NewCustomizedConn(c, mysql8server, credProvider, server.EmptyHandler{})
+func handleConnection(c net.Conn, credProvider *server.InMemoryProvider, mysql8server *server.Server, mysqlHandler *handler.ProxyHandler) {
+	conn, err := server.NewCustomizedConn(c, mysql8server, credProvider, mysqlHandler)
 	if err != nil {
 		log.Println(errors.Wrap(err, "error creating connection handler"))
 		return
